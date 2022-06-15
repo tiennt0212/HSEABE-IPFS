@@ -23,6 +23,8 @@ class HSEABE:
       if(datatype == 'Element'):
         # Decode to have a string
         data[i] = self._serializeElement(data[i]).decode()
+      elif(datatype == 'str'):
+        continue
       else:
         raise Exception('May it not a LIST of ELEMENT data {0}, receive {1}'.format(data, datatype))
     return data
@@ -37,7 +39,7 @@ class HSEABE:
         raise Exception('Re-checking this data, this list contain a weird data {0}, receive {1}'.format(data[i], datatype))
     return data
   
-  def _objectToString(self, data):
+  def _serializeObject(self, data):
     # # The input data is a ciphertext of ABE encryption
     # # But it's needed to stored
     # # I would like to convert it into string.
@@ -57,19 +59,29 @@ class HSEABE:
     # return json.dumps(data)
     for key in data.keys():
       datatype = type(data[key]).__name__
-      if(datatype == 'Element'):
+      if (key == 'policy'):
+        print("Key {} has been serialized as POLICY key".format(key))
+        temp = str(data['policy'])
+        data['policy'] = temp
+      elif(datatype == 'Element'):
         # decode() to have a string
+        print("Key {} has been serialized as ELEMENT type".format(key))
         data[key] = self._serializeElement(data[key]).decode()
       elif(datatype == 'list'):
+        print("Key {} has been serialized as LIST type".format(key))
         data[key] = self._serializeList(data[key])
       elif(datatype == 'dict'):
         # Recursive function
-        return self._objectToString(data[key])
+        print("Key {} has been serialized as DICT type".format(key))
+        data[key] = self._serializeObject(data[key])
+        
       else:
         raise Exception('This dictionary key cannot serialize by a sub-data {0}, its type is {1}'.format(key, datatype))
-    return json.dumps(data)
+    # data.pop('e_gh_kA', None)
 
-  def _stringToObject(self, data):
+    return data
+
+  def _deserializeObject(self, data):
     # # The input data is a ciphertext of ABE encryption
     # # Currently, it's a string, and its value is bytes style
     # # It's needed to back into the right data-type before decryption
@@ -94,18 +106,31 @@ class HSEABE:
     # return data
 
     # convert it to an object first.
-    data = json.loads(data)
-
     for key in data.keys():
       datatype = type(data[key]).__name__
-      if(datatype == 'str'):
-        # encode() to have bytes
-        data[key] = self._deserializeElement(data[key].encode())
+      if(key == 'attr_list'):
+        print("Key {} has been deserialized as ATTR LIST key".format(key))
+        # for i in range(len(data[key])):
+          # data[key].append(data[key][i].upper())
+        continue
       elif(datatype == 'list'):
+        # print('==== Receive list data: ', key, data[key])
+        print("Key {} has been deserialized as LIST type".format(key))
         data[key] = self._deserializeList(data[key])
       elif(datatype == 'dict'):
         # Recursive function
-        return self._stringToObject(data[key])
+        # print('==== Receive dict data: ', key, data[key])
+        print("Key {} has been deserialized as DICT type".format(key))
+        data[key] = self._deserializeObject(data[key])
+      elif(key == 'policy'):
+        print("Key {} has been deserialized as POLICY key".format(key))
+        print(data['policy'])
+        data['policy'] = SecretUtil(self.habe.getGroup()).createPolicy(data['policy'])
+      elif(datatype == 'str'):
+        # encode() to have bytes
+        # print('==== Receive string data: ', key, data[key])
+        print("Key {} has been deserialized as STRING type".format(key))
+        data[key] = self._deserializeElement(data[key].encode())
       else:
         raise Exception('This dictionary key cannot deserialize by a sub-data {0}, its type is {1}'.format(key, datatype))
     return data
@@ -130,11 +155,13 @@ class HSEABE:
 
     # the second value is string
     # it need a special convert to be the right dictionary.
-    cipherKey = self._stringToObject(seperatedData[1])
+    print("======== DECRYPT -  HANDLE CIPHER KEY ==========")
+    print(seperatedData[1])
+    cipherKey = self._deserializeObject(json.loads(seperatedData[1]))
 
     return cipherText, cipherKey
 
-  def storeFile (self, policy, attr, content):
+  def encryptContent (self, policy, attr, content):
     # INPUT
     ## policy: string
     ## attr: array of string
@@ -151,19 +178,60 @@ class HSEABE:
 
     # calculate data
     self.haes.setKey(aesKey)
-    cipherText = self.haes.encryptString(content)
-    combinedData = self._combineData(cipherText.decode('iso8859-1'), self._objectToString(cipherKey))
+    cipherText = self.haes.encryptDict(content)
+    combinedData = self._combineData(cipherText.decode('iso8859-1'), json.dumps(self._serializeObject(cipherKey)))
 
-    # serialize data before return
-    srlPublicKey = self._objectToString(publicKey)
-    srlMasterKey = self._objectToString(masterKey)
-    srlSecretKey = self._objectToString(secretKey)
+    # serialize and dumps data before return
+    srlPublicKey = json.dumps(self._serializeObject(publicKey))
+    srlMasterKey = json.dumps(self._serializeObject(masterKey))
+
+    # print("====== SERIALIZE MASTER KEY ======= ")
+    # print(secretKey)
+    srlSecretKey = json.dumps(self._serializeObject(secretKey))
+    # print(srlSecretKey)
 
 
     # Return data
-    ## publicKey: ........... NEEDED to dumps
-    ## masterKey: ........... NEEDED to dumps
-    ## secretKey: ........... NEEDED to dumps
+    ## publicKey: string, is public
+    ## masterKey: string, was stored by the owner
+    ## secretKey: string, authorized user will store it
     ## combinedData: string, will be used to stored on IPFS
 
     return (srlPublicKey, srlMasterKey, srlSecretKey, combinedData)
+  
+  def decryptFile(self, publicKey, secretKey, combinedData):
+    # secretKey is the secret key of user
+    # seperate combinedData into 2 pieaces
+    (ciphertext, cipherKey) = self._seperateData(combinedData)
+
+    # deserialize input data
+    # cipherKey have been deserialized in seperate step
+
+    print("========== DECRYPT - HANDLE SECRET KEY =============")
+    dsrSecretKey = self._deserializeObject(json.loads(secretKey))
+    print("========== DECRYPT - HANDLE PUBLIC KEY =============")
+    print(publicKey)
+    dsrlPublicKey = self._deserializeObject(json.loads(publicKey))
+    
+
+    # Re-generate origin AES key
+    print('========AFTER DESERIALIZE - SECRET KEY===========')
+    print(dsrSecretKey)
+    print('========AFTER DESERIALIZE - CIPHER KEY===========')
+    print(cipherKey)
+    print(type(cipherKey['policy']))
+    print('========AFTER DESERIALIZE - PUBLIC KEY===========')
+    print(dsrlPublicKey)
+
+    GT = self.habe.decryptCipherKey(dsrlPublicKey, cipherKey, dsrSecretKey)
+
+
+    aesKey = self.habe.genKeyAES(GT)
+
+    print("==========", GT)
+
+
+    # Decrypt to receive plaintext
+    plaintext = self.haes.decryptToString(ciphertext)
+    return plaintext
+

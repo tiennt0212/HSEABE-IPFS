@@ -35,6 +35,7 @@ class HABE:
   def genKeyAES(self, randomGT):
     # serialize randomGT to bytes
     # hash these bytes to receive 32bytes of key
+    print("randomGT has type ", type(randomGT) )
     return HSHA().hash(self.serialize(randomGT))
 
   def getCipherKey(self, publicKey, randomGT, policyStr):
@@ -42,6 +43,7 @@ class HABE:
     return self.cpabe.encrypt(publicKey, randomGT, policyStr)
 
   def decryptCipherKey(self, publicKey, ciphertext, key):
+    print(key)
     return self.cpabe.decrypt(publicKey, ciphertext, key)
 
   

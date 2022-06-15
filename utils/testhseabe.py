@@ -72,7 +72,8 @@ def storeFile (policyStr, attr, msg):
 
   return (publicKey, masterKey, secretKey, combinedData)
 
-def decrypt(publicKey, userKey, ciphertext, cipherKey):
+def decrypt(publicKey, userKey, combinedData):
+  (ciphertext, cipherKey) = _seperateData(combinedData)
   habe = HABE()
   GT = habe.decryptCipherKey(publicKey, cipherKey, userKey)
 
@@ -94,17 +95,7 @@ testPlaintext = f.read()
 
 (publicKey, masterKey, secretKey, combinedData) = storeFile("(OWNER and OWNERKEY)", ["OWNER", "OWNERKEY"], testPlaintext)
 
-(cipherText, cipherKey) = _seperateData(combinedData)
 
-
-# for key in publicKey.keys():
-#   print(type(publicKey[key]).__name__)
-#   # print(type(publicKey[key]))
-#   if(type(publicKey[key]) == list):
-#     for i in range(len(publicKey[key])):
-#       # print(type(publicKey[key][i]).__name__)
-#       if(type(publicKey[key][i]).__name__ == 'Element'):
-#         print('type is pairing element')
 
 
 serializePK = HSEABE()._objectToString(publicKey)
@@ -116,18 +107,7 @@ serializeMK = HSEABE()._objectToString(masterKey)
 deserializeMK = HSEABE()._stringToObject(serializeMK)
 print(deserializeMK, type(deserializeMK))
 
-
-if(deserializeMK == masterKey):
-  print('Deserialize MK success')
-else:
-  print('Deserialize MK failed')
-
-if(deserializePK == publicKey):
-  print('Deserialize PK success')
-else:
-  print('Deserialize PK failed')
-
-decryptCipherText = decrypt(deserializePK, secretKey, cipherText,cipherKey)
+decryptCipherText = decrypt(deserializePK, secretKey, combinedData)
 
 if (testPlaintext == decryptCipherText):
   print('Decrypt successfully')

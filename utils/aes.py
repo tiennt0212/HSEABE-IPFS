@@ -27,6 +27,7 @@ class HAES:
     return self.aes.encrypt(self._pad(plaintext))
 
   def decryptToString(self, ciphertext):
+    print(self.aes.decrypt(ciphertext))
     return self._unpad(self.aes.decrypt(ciphertext).decode())
 
   def encryptDict(self, data):
